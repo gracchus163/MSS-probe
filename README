@@ -1,0 +1,7 @@
+./probe.out pcap:<pcapfile>
+Will produce timestamped bin files
+Run stats.sh with a bin file as the argument
+
+If needed to compile
+./mk probe_bin.c
+./mk read_bin.c

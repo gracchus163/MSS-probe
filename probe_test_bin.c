@@ -226,7 +226,10 @@ int main(int argc, char *argv[])
 	strftime (str_time, sizeof(str_time), "%Y-%m-%d %H:%M:%S.bin", gmtime(&now));
 	
 	FILE *f = fopen(str_time, "wb");
-	if(f == NULL) return -5;
+	if(f == NULL) {
+		printf("fopen failed, full disk?\n");
+		return -5;
+	}
 
 	struct bin *record;
 	record = malloc(sizeof(struct bin));
@@ -242,7 +245,10 @@ int main(int argc, char *argv[])
 			strftime (str_time, sizeof(str_time), "%Y-%m-%d %H:%M:%S.bin", gmtime(&now));
 	
 			f = fopen(str_time, "wb");
-			if(f == NULL) return -5
+			if(f == NULL) {
+				printf("fopen failed, full disk?\n");
+				return -5;
+			}
 			count = 0;
 		}
 		//record->mss_quic = 0xdeadbeef; record->segment_size = 0xfeed5eed; record->dscp = 0xbb;

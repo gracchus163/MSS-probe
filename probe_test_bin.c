@@ -34,10 +34,12 @@ struct bin {
 	uint16_t ece : 1;
 	uint16_t cwr : 1;
 };
+unsigned char salt1[30];
+unsigned char salt2[30];
 
 static void per_packet(libtrace_packet_t *packet, FILE *f, struct bin *record)
 {
-	trace_set_capture_length(packet, 120); //snaplen
+	//trace_set_capture_length(packet, 120); //snaplen
 	uint16_t ether;
 	void *ip_hdr;
 	uint32_t rem;
@@ -65,13 +67,13 @@ static void per_packet(libtrace_packet_t *packet, FILE *f, struct bin *record)
 	//		printf("%d %d\n", ip->ip_off, record->opts);
 			uint32_t ad = ntohl(ip->ip_src.s_addr);
 			SHA1_Update(&context, &ad, sizeof(uint32_t));
-			SHA1_Update(&context, "SUPER secure salt", sizeof("SUPER secure salt"));
+			SHA1_Update(&context, salt1, 30);
 			SHA1_Final(record->hash, &context);//build
 			
 			ad = ad>>8;
 			SHA1_Init(&context);
 			SHA1_Update(&context, &ad, sizeof(uint32_t));//additional hash of /24
-			SHA1_Update(&context, "SUPER secure salt number2", sizeof("SUPER secure salt number2"));
+			SHA1_Update(&context, salt2, 30);
 			SHA1_Final(record->hash_sub, &context);//build
 			break;
 		case TRACE_ETHERTYPE_IPV6:
@@ -83,15 +85,15 @@ static void per_packet(libtrace_packet_t *packet, FILE *f, struct bin *record)
 			hdr = trace_get_payload_from_ip6(ip6, &proto, &rem);
 			
 			SHA1_Update(&context, (ip6->ip_src.s6_addr),16);
-			SHA1_Update(&context, "SUPER secure salt", sizeof("SUPER secure salt"));
+			SHA1_Update(&context, salt1, 30);
 			SHA1_Final(record->hash, &context);//build
 
-			unsigned char *ad6 = malloc(7);
-			memcpy(ad6, (ip6->ip_src.s6_addr), 7);
+			unsigned char *ad6 = malloc(6);
+			memcpy(ad6, (ip6->ip_src.s6_addr), 6);
 			//printf("ip6: %d ip6# %d\n", *ad6, *ip6->ip_src.s6_addr);
 			SHA1_Init(&context);
-			SHA1_Update(&context, ad6, 7);
-			SHA1_Update(&context, "SUPER secure salt number2", sizeof("SUPER secure salt number2"));
+			SHA1_Update(&context, ad6, 6);
+			SHA1_Update(&context, salt2, 30);
 			SHA1_Final(record->hash_sub, &context);//build
 			
 			break;
@@ -195,6 +197,9 @@ int main(int argc, char *argv[])
 
         libtrace_t *trace = NULL;
         libtrace_packet_t *packet = NULL;
+	int snaplen = 150;
+	int promisc = 1;
+
         if (argc < 2) {
                 fprintf(stderr, "Usage: %s inputURI\n", argv[0]);
                 return 1;
@@ -215,21 +220,34 @@ int main(int argc, char *argv[])
                 libtrace_cleanup(trace, packet);
                 return 1;
         }
-
+	if (trace_config(trace,  TRACE_OPTION_SNAPLEN, &snaplen)== -1) {
+		trace_perror(trace, "Setting snaplen");
+		libtrace_cleanup(trace, packet);
+		return 1;
+	}
+	//trace_config(trace, TRACE_OPTION_PROMISC, &promisc); //cant set for pcapfiles
         if (trace_start(trace) == -1) {
                 trace_perror(trace,"Starting trace");
                 libtrace_cleanup(trace, packet);
                 return 1;
         }
+	FILE *s = fopen("salt1", "r");
+	fread(salt1, 30, 1, s);
+	fclose(s);
+	s = fopen("salt2", "r");
+	fread(salt2, 30, 1, s);
+	fclose(s);
 	char str_time[24];
 	time_t now = time (0);
-	strftime (str_time, sizeof(str_time), "%Y-%m-%d %H:%M:%S.bin", gmtime(&now));
+	strftime (str_time, sizeof(str_time), "%Y-%m-%d_%H:%M:%S.bin", gmtime(&now));
 	
 	FILE *f = fopen(str_time, "wb");
 	if(f == NULL) {
 		printf("fopen failed, full disk?\n");
 		return -5;
 	}
+	FILE *stats = fopen("packet_stats", "a");
+	char str_dropped[100];
 
 	struct bin *record;
 	record = malloc(sizeof(struct bin));
@@ -242,8 +260,10 @@ int main(int argc, char *argv[])
 		if(count > 1000000){ //every million packets rotate logs. appropriate number? 31MB logs
 			fclose(f);
 			now = time(0);
-			strftime (str_time, sizeof(str_time), "%Y-%m-%d %H:%M:%S.bin", gmtime(&now));
-	
+			strftime (str_time, sizeof(str_time), "%Y-%m-%d_%H:%M:%S.bin", gmtime(&now));
+			snprintf(str_dropped, 100, "%s d%lu r%lu a%lu\n", str_time, trace_get_dropped_packets(trace), trace_get_received_packets(trace),trace_get_accepted_packets(trace));
+			fwrite(str_dropped, strlen(str_dropped), 1, stats);	
+			fflush(stats);
 			f = fopen(str_time, "wb");
 			if(f == NULL) {
 				printf("fopen failed, full disk?\n");
@@ -251,7 +271,6 @@ int main(int argc, char *argv[])
 			}
 			count = 0;
 		}
-		//record->mss_quic = 0xdeadbeef; record->segment_size = 0xfeed5eed; record->dscp = 0xbb;
 		fwrite(record, sizeof(struct bin), 1, f);
 		//fflush(f);
 		memset(record->hash, 1, sizeof(record->hash));
@@ -261,14 +280,8 @@ int main(int argc, char *argv[])
         }
 
 	fclose(f);
+	fclose(stats);
 	free(record);
-        if (trace_is_err(trace)) {
-                trace_perror(trace,"Reading packets");
-                libtrace_cleanup(trace, packet);
-                return 1;
-        }
-
-	//printf("Packet Count = %" PRIu64 "\n", count);
 
         libtrace_cleanup(trace, packet);
         return 0;

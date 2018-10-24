@@ -5,3 +5,4 @@ Run stats.sh with a bin file as the argument
 If needed to compile
 ./mk probe_bin.c
 ./mk read_bin.c
+Must have file named salt1 and salt2 in directory each with a 30 character string

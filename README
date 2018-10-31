@@ -1,8 +1,30 @@
+Reads packets from an interface or pcapfile and records stats in a binary format.
+Information recorded:
+  Hashed IP
+  Hashed subnet
+  MSS
+  Segment Size
+  TCP Options order
+  TCP flags
+  DSCP
+  Transport is TCP or UDP
+  IPv4 or IPv6
+  IPv4 fragment flags
+  QUIC version ID
+We then also record how many occurences of each MSS and DSCP in the dataset.
+Recording speeds of 200MB/s with 0 packet drops is the max we have achieved on our hardware.
+  
+
+Indebted to libtrace [https://github.com/LibtraceTeam/libtrace]
+
 ./probe.out pcap:<pcapfile>
 Will produce timestamped bin files
-Run stats.sh with a bin file as the argument
+Run read_bin.out with a bin file as the argument
 
 If needed to compile
 ./mk probe_bin.c
 ./mk read_bin.c
 Must have file named salt1 and salt2 in directory each with a 30 character string
+TODO:
+Improve performance of reading the packets
+Porting to libtrace parallel may help with this (:

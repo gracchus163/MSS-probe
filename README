@@ -1,3 +1,21 @@
+Reads packets from an interface or pcapfile and records stats in a binary format.
+Information recorded:
+  Hashed IP
+  Hashed subnet
+  MSS
+  Segment Size
+  TCP Options order
+  TCP flags
+  DSCP
+  Transport is TCP or UDP
+  IPv4 or IPv6
+  IPv4 fragment flags
+  QUIC version ID
+We then also record how many occurences of each MSS and DSCP in the dataset.
+Recording speeds of 200MB/s with 0 packet drops is the max we have achieved on our hardware.
+
+Indebted to libtrace [https://github.com/LibtraceTeam/libtrace]
+
 ./probe.out pcap:<pcapfile>
 or
 ./probe.out bpf:igb0   #bsd interface named igb0
@@ -14,3 +32,7 @@ Run stats.sh with a bin file as the argument will slowly process the bin file an
 If needed to compile
 ./mk
 will compile the 3 programs
+
+TODO:
+Improve performance of reading the packets
+Porting to libtrace parallel may help with this (:

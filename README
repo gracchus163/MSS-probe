@@ -31,7 +31,7 @@ Run stats.sh with a bin file as the argument will slowly process the bin file an
 
 If needed to compile
 ./mk
-will compile the 3 programs
+will compile the 3 programs on Freebsd only. some changes required for linux or maybe the compiler
 
 TODO:
 Improve performance of reading the packets

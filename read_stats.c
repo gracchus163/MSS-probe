@@ -6,18 +6,17 @@
 
 
 struct bin {
-	unsigned char hash[20];//20
-	unsigned char hash_sub[20]; //20I
-	uint32_t mss_quic;//4
-	uint32_t segment_size;//4
-	uint8_t dscp;//1
-	uint8_t opts;//1
-	unsigned char trans;//1
-
-	uint16_t ip4 : 1;
-	uint16_t mf : 1;
-	uint16_t df : 1;
-	uint16_t ecn_ns : 1;
+	unsigned char hash[20];//20		SHA1 of the IP
+	unsigned char hash_sub[20]; //20	SHA1 of the subnet. IPv4/24 IPv6/48
+	uint32_t mss_quic;//4			Records the TCP MSS value of the UDP payload bytes that correspond to a QUIC version id
+	uint32_t segment_size;//4		
+	uint8_t dscp;//1			Differentiated Services Code Point
+	uint8_t opts;//1			The position of MSS in the options list
+	unsigned char trans;//1			T-cp or U-dp
+	uint16_t ip4 : 1;//bitflags		is ip4?
+	uint16_t mf : 1;//			More fragments
+	uint16_t df : 1;//			Don't fragment
+	uint16_t ecn_ns : 1;//bitflags		9 TCP flags aka Control bits
 	uint16_t fin : 1;
 	uint16_t syn : 1;
 	uint16_t rst : 1;
@@ -34,13 +33,13 @@ struct li {
 int main(int argc, char *argv[]) {
 	
 	struct hsearch_data mss_table;
-	struct hsearch_data dscp_table;
+	struct hsearch_data dscp_table;	//setup 2 hash tables
 	memset((void *)&mss_table, 0, sizeof(mss_table));
 	memset((void *)&dscp_table, 0, sizeof(dscp_table));
-	hcreate_r(256, &dscp_table);
-	hcreate_r(5000,&mss_table);
+	hcreate_r(256, &dscp_table);	//full range of possible dscp values
+	hcreate_r(5000,&mss_table);	//possible range is 0-65536. seems unrealistic, can increase the table size otherwise
 	struct li *mss_list;
-	struct li *dscp_list;
+	struct li *dscp_list;//linked lists to store occurences in the hash table
 	mss_list = malloc(sizeof(struct li));
 	dscp_list = malloc(sizeof(struct li));
 	struct li *mss_head = mss_list;
@@ -72,12 +71,12 @@ int main(int argc, char *argv[]) {
 			snprintf(mss_int, 11, "%d", record.mss_quic);
 			item_mss.key = strdup(mss_int);
 			item_mss.data = d;
-			if (hsearch_r(item_mss, FIND, &search_item, &mss_table)!= NULL){
+			if (hsearch_r(item_mss, FIND, &search_item, &mss_table)!= NULL){//mss already in the table,grab occurence value and update by 1
 				d = search_item->data;
 				*d += 1;
 				item_mss.data = d;
 				hsearch_r(item_mss, ENTER, &search_item, &mss_table);
-			}else {
+			}else {//new mss occurence, add it to the table and iterate the linked list
 				hsearch_r(item_mss, ENTER, &search_item, &mss_table);
 				mss_head->key = item_mss.key;
 				mss_head->next = malloc(sizeof(struct li));
@@ -90,12 +89,12 @@ int main(int argc, char *argv[]) {
 			snprintf(dscp_int, 11, "%d", record.dscp>>2);
 			item_dscp.key = strdup(dscp_int);
 			item_dscp.data = y;
-			if (hsearch_r(item_dscp, FIND, &search_item, &dscp_table)!= NULL){
+			if (hsearch_r(item_dscp, FIND, &search_item, &dscp_table)!= NULL){//dscp already found in table, grab occurence and update by 1
 				y = search_item->data;
 				*y += 1;
 				item_dscp.data = y;
 				hsearch_r(item_dscp, ENTER, &search_item, &dscp_table);
-			}else {
+			}else {//new dscp occurence, add it to the table and iterate the linked list
 				hsearch_r(item_dscp, ENTER, &search_item, &dscp_table);
 				dscp_head->key = item_dscp.key;
 				dscp_head->next = malloc(sizeof(struct li));
@@ -134,6 +133,7 @@ int main(int argc, char *argv[]) {
 
 	}
 	fclose(f);
+	//loop over lists to get the keys stored in the table and their values
 	mss_head = mss_list;
 	fprintf(stderr,"MSS	No.\n");
 	while(mss_head->next) {

@@ -1,5 +1,5 @@
-#!/bin/bash
-./read_bin.c.out "$1" > "$1__tmp"
+#!/bin/sh
+./read.out "$1" > "$1__tmp"
 echo -n "Number of tcp packets: "
 awk '/tcp/' "$1__tmp" | wc -l
 echo -n "Number of udp packets: "

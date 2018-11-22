@@ -1,7 +1,16 @@
 ./probe.out pcap:<pcapfile>
-Will produce timestamped bin files
-Run stats.sh with a bin file as the argument
+or
+./probe.out bpf:igb0   #bsd interface named igb0
+./probe.out int:eth0	#linux interface named eth0
+
+Will produce timestamped bin files and append dropped stats to a file named "packet_stats"
+Must have file named salt1 and salt2 in directory each with a 30 character string
+Interface must be set to promiscuous mode
+
+./read.out <bin_file> will print out the collected stats of every packet
+Run stats.sh with a bin file as the argument will slowly process the bin file and print out stats on MSS and DSCP occurence.
+./read_stats.out <bin_file> will print out the collected stats of every packet to stdout and print to stderr the MSS and DSCP occurences. Has not been tested as much but seems to work, try it first. Both provided as insurance.
 
 If needed to compile
-./mk probe_bin.c
-./mk read_bin.c
+./mk
+will compile the 3 programs

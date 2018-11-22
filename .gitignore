@@ -1,2 +1,5 @@
 *.out
 *.bin
+*.tmp
+salt1
+salt2

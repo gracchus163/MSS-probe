@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#define __USE_GNU
+#define _GNU_SOURCE
 #include <search.h>
 #include <string.h>
 
@@ -32,12 +34,15 @@ struct li {
 };
 int main(int argc, char *argv[]) {
 	
-	struct hsearch_data mss_table;
-	struct hsearch_data dscp_table;	//setup 2 hash tables
-	memset((void *)&mss_table, 0, sizeof(mss_table));
-	memset((void *)&dscp_table, 0, sizeof(dscp_table));
-	hcreate_r(256, &dscp_table);	//full range of possible dscp values
-	hcreate_r(5000,&mss_table);	//possible range is 0-65536. seems unrealistic, can increase the table size otherwise
+	struct hsearch_data *mss_table;  
+	struct hsearch_data *dscp_table;  //setup 2 hash tables
+	mss_table = calloc(1, sizeof(struct hsearch_data));
+	dscp_table = calloc(1, sizeof(struct hsearch_data));
+	//memset((void *)&mss_table, 0, sizeof(mss_table));
+	//memset((void *)&dscp_table, 0, sizeof(dscp_table));
+	
+	hcreate_r(256, dscp_table);	//full range of possible dscp values
+	hcreate_r(5000,mss_table);	//possible range is 0-65536. seems unrealistic, can increase the table size otherwise
 	struct li *mss_list;
 	struct li *dscp_list;//linked lists to store occurences in the hash table
 	mss_list = malloc(sizeof(struct li));
@@ -71,36 +76,38 @@ int main(int argc, char *argv[]) {
 			snprintf(mss_int, 11, "%d", record.mss_quic);
 			item_mss.key = strdup(mss_int);
 			item_mss.data = d;
-			if (hsearch_r(item_mss, FIND, &search_item, &mss_table)!= NULL){//mss already in the table,grab occurence value and update by 1
+			if (hsearch_r(item_mss, FIND, &search_item, mss_table)!= NULL){//mss already in the table,grab occurence value and update by 1
 				d = search_item->data;
 				*d += 1;
 				item_mss.data = d;
-				hsearch_r(item_mss, ENTER, &search_item, &mss_table);
+				hsearch_r(item_mss, ENTER, &search_item, mss_table);
 			}else {//new mss occurence, add it to the table and iterate the linked list
-				hsearch_r(item_mss, ENTER, &search_item, &mss_table);
+				hsearch_r(item_mss, ENTER, &search_item, mss_table);
 				mss_head->key = item_mss.key;
 				mss_head->next = malloc(sizeof(struct li));
 				mss_head = mss_head->next;
 				mss_head->next = NULL;
 			}	
+		//	free(d);
 			char dscp_int[11];
 			int *y = malloc(sizeof(int));
 			*y = 1;
 			snprintf(dscp_int, 11, "%d", record.dscp>>2);
 			item_dscp.key = strdup(dscp_int);
 			item_dscp.data = y;
-			if (hsearch_r(item_dscp, FIND, &search_item, &dscp_table)!= NULL){//dscp already found in table, grab occurence and update by 1
+			if (hsearch_r(item_dscp, FIND, &search_item, dscp_table)!= NULL){//dscp already found in table, grab occurence and update by 1
 				y = search_item->data;
 				*y += 1;
 				item_dscp.data = y;
-				hsearch_r(item_dscp, ENTER, &search_item, &dscp_table);
+				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
 			}else {//new dscp occurence, add it to the table and iterate the linked list
-				hsearch_r(item_dscp, ENTER, &search_item, &dscp_table);
+				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
 				dscp_head->key = item_dscp.key;
 				dscp_head->next = malloc(sizeof(struct li));
 				dscp_head = dscp_head->next;
 				dscp_head->next = NULL;
 			}	
+		//	free(y);
 		} else if (record.trans=='U') {
 			printf("udp ");
 			printf(" 0x%02x%02x%02x%02x", record.hash[0], record.hash[1], record.hash[2], record.hash[3]);
@@ -113,18 +120,19 @@ int main(int argc, char *argv[]) {
 			snprintf(dscp_int, 11, "%d", record.dscp>>2);
 			item_dscp.key = strdup(dscp_int);
 			item_dscp.data = y;
-			if (hsearch_r(item_dscp, FIND, &search_item, &dscp_table)!= NULL){
+			if (hsearch_r(item_dscp, FIND, &search_item, dscp_table)!= NULL){
 				y = search_item->data;
 				*y += 1;
 				item_dscp.data = y;
-				hsearch_r(item_dscp, ENTER, &search_item, &dscp_table);
+				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
 			}else {
-				hsearch_r(item_dscp, ENTER, &search_item, &dscp_table);
+				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
 				dscp_head->key = item_dscp.key;
 				dscp_head->next = malloc(sizeof(struct li));
 				dscp_head = dscp_head->next;
 				dscp_head->next = NULL;
 			}	
+		//	free(y);
 		}else {
 			printf("neither");
 		}
@@ -138,7 +146,7 @@ int main(int argc, char *argv[]) {
 	fprintf(stderr,"MSS	No.\n");
 	while(mss_head->next) {
 		item_mss.key = mss_head->key;
-		hsearch_r(item_mss, FIND, &search_item, &mss_table);
+		hsearch_r(item_mss, FIND, &search_item, mss_table);
 		fprintf(stderr,"%s	%d\n", mss_head->key, *((int*)search_item->data));
 		mss_head = mss_head->next;
 	}
@@ -146,7 +154,7 @@ int main(int argc, char *argv[]) {
 	fprintf(stderr,"DSCP	No.\n");
 	while(dscp_head->next) {
 		item_dscp.key = dscp_head->key;
-		hsearch_r(item_dscp, FIND, &search_item, &dscp_table);
+		hsearch_r(item_dscp, FIND, &search_item, dscp_table);
 		fprintf(stderr,"%s	%d\n", dscp_head->key, *((int*)search_item->data));
 		dscp_head = dscp_head->next;
 	}

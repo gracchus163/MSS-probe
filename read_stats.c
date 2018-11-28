@@ -33,7 +33,6 @@ struct li {
 	struct li *next;
 };
 int main(int argc, char *argv[]) {
-	
 	struct hsearch_data *mss_table;  
 	struct hsearch_data *dscp_table;  //setup 2 hash tables
 	mss_table = calloc(1, sizeof(struct hsearch_data));
@@ -71,16 +70,18 @@ int main(int argc, char *argv[]) {
 			printf(" dscp %d mss %d mss pos:%d size %d ", record.dscp>>2, record.mss_quic, record.opts, record.segment_size);
 			printf("ecn_ns %u fin %u syn %u rst %u psh %u ack %u urg %u ece %u cwr %u ", record.ecn_ns, record.fin, record.syn, record.rst, record.psh, record.ack, record.urg, record.ece, record.cwr);
 			char mss_int[11];
-			int *d = malloc(sizeof(int));
+			uint64_t *d = malloc(sizeof(uint64_t));
 			*d = 1;
 			snprintf(mss_int, 11, "%d", record.mss_quic);
 			item_mss.key = strdup(mss_int);
 			item_mss.data = d;
 			if (hsearch_r(item_mss, FIND, &search_item, mss_table)!= NULL){//mss already in the table,grab occurence value and update by 1
+				free(d);
+				free(item_mss.key);
 				d = search_item->data;
 				*d += 1;
-				item_mss.data = d;
-				hsearch_r(item_mss, ENTER, &search_item, mss_table);
+			//	item_mss.data = d;
+			//	hsearch_r(item_mss, ENTER, &search_item, mss_table);
 			}else {//new mss occurence, add it to the table and iterate the linked list
 				hsearch_r(item_mss, ENTER, &search_item, mss_table);
 				mss_head->key = item_mss.key;
@@ -88,18 +89,19 @@ int main(int argc, char *argv[]) {
 				mss_head = mss_head->next;
 				mss_head->next = NULL;
 			}	
-		//	free(d);
 			char dscp_int[11];
-			int *y = malloc(sizeof(int));
+			uint64_t *y = malloc(sizeof(uint64_t));
 			*y = 1;
 			snprintf(dscp_int, 11, "%d", record.dscp>>2);
 			item_dscp.key = strdup(dscp_int);
 			item_dscp.data = y;
 			if (hsearch_r(item_dscp, FIND, &search_item, dscp_table)!= NULL){//dscp already found in table, grab occurence and update by 1
+				free(y);
+				free(item_dscp.key);
 				y = search_item->data;
 				*y += 1;
-				item_dscp.data = y;
-				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
+				//item_dscp.data = y;
+				//hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
 			}else {//new dscp occurence, add it to the table and iterate the linked list
 				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
 				dscp_head->key = item_dscp.key;
@@ -107,7 +109,6 @@ int main(int argc, char *argv[]) {
 				dscp_head = dscp_head->next;
 				dscp_head->next = NULL;
 			}	
-		//	free(y);
 		} else if (record.trans=='U') {
 			printf("udp ");
 			printf(" 0x%02x%02x%02x%02x", record.hash[0], record.hash[1], record.hash[2], record.hash[3]);
@@ -115,16 +116,16 @@ int main(int argc, char *argv[]) {
 			printf(" dscp %d QUIC 0x%08x size %d ", record.dscp>>2,record.mss_quic, record.segment_size);
 
 			char dscp_int[11];
-			int *y = malloc(sizeof(int));
+			uint64_t *y = malloc(sizeof(uint64_t));
 			*y = 1;
 			snprintf(dscp_int, 11, "%d", record.dscp>>2);
 			item_dscp.key = strdup(dscp_int);
 			item_dscp.data = y;
 			if (hsearch_r(item_dscp, FIND, &search_item, dscp_table)!= NULL){
+				free(y);
+				free(item_dscp.key);
 				y = search_item->data;
 				*y += 1;
-				item_dscp.data = y;
-				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
 			}else {
 				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
 				dscp_head->key = item_dscp.key;
@@ -132,7 +133,6 @@ int main(int argc, char *argv[]) {
 				dscp_head = dscp_head->next;
 				dscp_head->next = NULL;
 			}	
-		//	free(y);
 		}else {
 			printf("neither");
 		}
@@ -147,7 +147,7 @@ int main(int argc, char *argv[]) {
 	while(mss_head->next) {
 		item_mss.key = mss_head->key;
 		hsearch_r(item_mss, FIND, &search_item, mss_table);
-		fprintf(stderr,"%s	%d\n", mss_head->key, *((int*)search_item->data));
+		fprintf(stderr,"%s	%lu\n", mss_head->key, *((uint64_t*)search_item->data));
 		mss_head = mss_head->next;
 	}
 	dscp_head = dscp_list;
@@ -155,7 +155,7 @@ int main(int argc, char *argv[]) {
 	while(dscp_head->next) {
 		item_dscp.key = dscp_head->key;
 		hsearch_r(item_dscp, FIND, &search_item, dscp_table);
-		fprintf(stderr,"%s	%d\n", dscp_head->key, *((int*)search_item->data));
+		fprintf(stderr,"%s	%lu\n", dscp_head->key, *((uint64_t*)search_item->data));
 		dscp_head = dscp_head->next;
 	}
 }

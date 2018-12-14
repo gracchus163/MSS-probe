@@ -42,26 +42,44 @@ int main(int argc, char *argv[]) {
 		verbose = 1;
 	}
 	struct hsearch_data *mss_table;  
-	struct hsearch_data *dscp_table;  //setup 2 hash tables
+	struct hsearch_data *dscp_table;  //setup hash tables
+	struct hsearch_data *ip_table;
+	struct hsearch_data *size_table;
 	mss_table = calloc(1, sizeof(struct hsearch_data));
 	dscp_table = calloc(1, sizeof(struct hsearch_data));
+	ip_table = calloc(1, sizeof(struct hsearch_data));
+	size_table = calloc(1, sizeof(struct hsearch_data));
 	
 	hcreate_r(256, dscp_table);	//full range of possible dscp values
 	hcreate_r(5000,mss_table);	//possible range is 0-65536. seems unrealistic, can increase the table size otherwise
+	hcreate_r(16000000, ip_table); // /24 subnet
+	hcreate_r(65536, size_table); // /24 subnet
 	struct li *mss_list;
 	struct li *dscp_list;//linked lists to store occurences in the hash table
+	struct li *ip_list;
+	struct li *size_list;
 	mss_list = malloc(sizeof(struct li));
 	dscp_list = malloc(sizeof(struct li));
+	ip_list = malloc(sizeof(struct li));
+	size_list = malloc(sizeof(struct li));
 	struct li *mss_head = mss_list;
 	struct li *dscp_head = dscp_list;
+	struct li *ip_head = ip_list;
+	struct li *size_head = size_list;
 	
 	ENTRY item_dscp;
 	ENTRY item_mss;
+	ENTRY item_ip;
+	ENTRY item_size;
 	ENTRY *search_item;
 	struct bin record;		
 	uint64_t i = 0;
 	uint64_t t = 0;
 	uint64_t u = 0;
+	uint64_t ip_count = 0;
+	uint64_t syn_count = 0;
+	uint64_t bad_syn_count = 0;
+	uint64_t mf_count = 0;
 	int bin_len = sizeof(record);	
 
 	FILE *f;
@@ -69,12 +87,44 @@ int main(int argc, char *argv[]) {
 for (int v = (verbose+1); v < argc; v++) {
 	f = fopen(argv[v],"rb");
 	while(fread(&record, bin_len, 1, f)>0){
+	//	if (record.ip4) continue;
+		i++;
 		if (verbose) {
-			printf("%lu. ", ++i);
+			printf("%lu. ", i);
 			printf("%s ", record.ip4 ? "IPv4" : "IPv6");
 		}
 		if (record.trans == 'T') {
 			t++;
+			if (record.syn) syn_count++;
+				char *ip_buf = malloc(41);
+				uint8_t *in = malloc(sizeof(uint8_t));
+				uint8_t *temp;
+				*in = (record.dscp>>2);
+				for (int q = 0; q < 20; q++) {
+					sprintf(ip_buf+(2*q), "%02x", record.hash_sub[q]);
+				}
+				*(ip_buf+40) = 0;
+				item_ip.key =ip_buf;
+				item_ip.data = in;
+				//printf("%s\n", ip_buf);
+				if (hsearch_r(item_ip, FIND, &search_item, ip_table)){//ip already in the table,grab occurence value and update by 1
+					temp = search_item->data;
+			//		printf("temp %u\n", *temp);
+					if (*in != *temp) {
+						printf("Dscp>>2 change from %u to %u %s\n", *temp, *in, ip_buf);
+					//	search_item->data = in;
+						*temp = *in;
+					}
+					free(in);
+					free(ip_buf);
+				}else {//new ip occurence, add it to the table and iterate the linked list
+					if (!hsearch_r(item_ip, ENTER, &search_item, ip_table)) perror("ip entry: ");
+					ip_head->key = item_ip.key;
+					ip_head->next = malloc(sizeof(struct li));
+					ip_head = ip_head->next;
+					ip_head->next = NULL;
+					ip_count++;
+				}	
 			if (verbose) {
 				printf("tcp ");
 				printf("0x%02x%02x%02x%02x", record.hash[0], record.hash[1], record.hash[2], record.hash[3]);
@@ -82,68 +132,14 @@ for (int v = (verbose+1); v < argc; v++) {
 				printf(" dscp %d mss %d mss pos:%d size %d ", record.dscp>>2, record.mss_quic, record.opts, record.segment_size);
 				printf("ecn_ns %u fin %u syn %u rst %u psh %u ack %u urg %u ece %u cwr %u ", record.ecn_ns, record.fin, record.syn, record.rst, record.psh, record.ack, record.urg, record.ece, record.cwr);
 			}
-			char mss_int[11];
-			uint64_t *d = malloc(sizeof(uint64_t));
-			*d = 1;
-			snprintf(mss_int, 11, "%d", record.mss_quic);
-			item_mss.key = strdup(mss_int);
-			item_mss.data = d;
-			if (hsearch_r(item_mss, FIND, &search_item, mss_table)!= NULL){//mss already in the table,grab occurence value and update by 1
-				free(d);
-				free(item_mss.key);
-				d = search_item->data;
-				*d += 1;
-			}else {//new mss occurence, add it to the table and iterate the linked list
-				hsearch_r(item_mss, ENTER, &search_item, mss_table);
-				mss_head->key = item_mss.key;
-				mss_head->next = malloc(sizeof(struct li));
-				mss_head = mss_head->next;
-				mss_head->next = NULL;
-			}	
-			char dscp_int[11];
-			uint64_t *y = malloc(sizeof(uint64_t));
-			*y = 1;
-			snprintf(dscp_int, 11, "%d", record.dscp>>2);
-			item_dscp.key = strdup(dscp_int);
-			item_dscp.data = y;
-			if (hsearch_r(item_dscp, FIND, &search_item, dscp_table)!= NULL){//dscp already found in table, grab occurence and update by 1
-				free(y);
-				free(item_dscp.key);
-				y = search_item->data;
-				*y += 1;
-			}else {//new dscp occurence, add it to the table and iterate the linked list
-				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
-				dscp_head->key = item_dscp.key;
-				dscp_head->next = malloc(sizeof(struct li));
-				dscp_head = dscp_head->next;
-				dscp_head->next = NULL;
-			}	
 		} else if (record.trans=='U') {
 			u++;
 			if (verbose) {
 				printf("udp ");
 				printf(" 0x%02x%02x%02x%02x", record.hash[0], record.hash[1], record.hash[2], record.hash[3]);
 				printf(" subnet 0x%02x%02x%02x%02x", record.hash_sub[0], record.hash_sub[1], record.hash_sub[2], record.hash_sub[3]);
-				printf(" dscp %d QUIC 0x%08x size %d ", record.dscp>>2,record.mss_quic, record.segment_size);
+				printf(" dscp %u QUIC 0x%08x size %u ", record.dscp>>2,record.mss_quic, record.segment_size);
 			}
-			char dscp_int[11];
-			uint64_t *y = malloc(sizeof(uint64_t));
-			*y = 1;
-			snprintf(dscp_int, 11, "%d", record.dscp>>2);
-			item_dscp.key = strdup(dscp_int);
-			item_dscp.data = y;
-			if (hsearch_r(item_dscp, FIND, &search_item, dscp_table)!= NULL){
-				free(y);
-				free(item_dscp.key);
-				y = search_item->data;
-				*y += 1;
-			}else {
-				hsearch_r(item_dscp, ENTER, &search_item, dscp_table);
-				dscp_head->key = item_dscp.key;
-				dscp_head->next = malloc(sizeof(struct li));
-				dscp_head = dscp_head->next;
-				dscp_head->next = NULL;
-			}	
 		}else if (verbose) {
 			printf("neither");
 		}
@@ -158,20 +154,7 @@ for (int v = (verbose+1); v < argc; v++) {
 	fprintf(stderr, "Total: %lu\n", i);
 	fprintf(stderr, "TCP: %lu\n", t);
 	fprintf(stderr, "UDP: %lu\n", u);
-	mss_head = mss_list;
-	fprintf(stderr,"MSS	No.\n");
-	while(mss_head->next) {
-		item_mss.key = mss_head->key;
-		hsearch_r(item_mss, FIND, &search_item, mss_table);
-		fprintf(stderr,"%s	%lu\n", mss_head->key, *((uint64_t*)search_item->data));
-		mss_head = mss_head->next;
-	}
-	dscp_head = dscp_list;
-	fprintf(stderr,"DSCP	No.\n");
-	while(dscp_head->next) {
-		item_dscp.key = dscp_head->key;
-		hsearch_r(item_dscp, FIND, &search_item, dscp_table);
-		fprintf(stderr,"%s	%lu\n", dscp_head->key, *((uint64_t*)search_item->data));
-		dscp_head = dscp_head->next;
-	}
+	fprintf(stderr, "MF: %lu\n", mf_count);
+	fprintf(stderr, "SYNs: %lu\n", syn_count);
+	fprintf(stderr, "Bad SYNs: %lu\n", bad_syn_count);
 }

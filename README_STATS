@@ -1,0 +1,9 @@
+dscp.c looks at dscp changes per prefix or per IP. It stores the last seen DSCP for every unique prefix/IP in a hash table. If that prefix/IP is seen later with a different DSCP, the change is printed to stdout and the value in the hash table is updated.
+I have been running sort -k7|uniq on the output which sorts it into prefix order then removes duplicate changes. As this runs for every packet seen, it takes a long time to run. About an hour for 2.7bn.
+
+exp.c records the rest of the stats. It records MF counts, SYN counts. If there is a SYN without any other flags and no MSS option, it records this count and then records the prefix into a hash table which tracks the number of occurences.
+If there is an MSS option, the MSS is put into a hash table along with a count which is updated on subsequent occurences.
+TCP segment size is recorded in the same way. A hash table entry for each unique size along with the count of occurences.
+The DSCP values are also recorded in a hash table along with their counts. DSCP is recorded for both TCP and UDP. Nothing apart from packet count is recorded for other protocols.
+
+The raw counts are printed out to stderr. The hash tables are written to csv files: mss_distribution.csv, dscp_distribution_all.csv, bad_syn_prefix_counts.csv, segment_size_distribution.csv

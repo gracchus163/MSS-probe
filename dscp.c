@@ -100,7 +100,7 @@ for (int v = (verbose+1); v < argc; v++) {
 				uint8_t *in = malloc(sizeof(uint8_t));
 				uint8_t *temp;
 				*in = (record.dscp>>2);
-				for (int q = 0; q < 20; q++) {
+				for (int q = 0; q < 20; q++) {//Change here
 					sprintf(ip_buf+(2*q), "%02x", record.hash_sub[q]);
 				}
 				*(ip_buf+40) = 0;
